@@ -1,0 +1,817 @@
+// ERP - Schema Prisma complet (PostgreSQL)
+// Conventions: PascalCase modeles, camelCase champs, @@map snake_case tables
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================================
+// NOYAU : Configuration, Societe, Auth, Audit
+// =====================================================================
+
+model AppConfig {
+  id                 Int      @id @default(1)
+  initialized        Boolean  @default(false)
+  jwtSecret          String?
+  articleCodePrefix  String   @default("C")
+  articleCodePadding Int      @default(6)
+  uniqueCodePrefix   String   @default("")
+  uniqueCodePadding  Int      @default(6)
+  ofCodePrefix       String   @default("OF")
+  ofCodePadding      Int      @default(6)
+  invoiceCodePrefix  String   @default("FA")
+  invoiceCodePadding Int      @default(6)
+  defaultStockAlert  Int      @default(100)
+  timezone           String   @default("Europe/Paris")
+  language           String   @default("fr")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("app_config")
+}
+
+model Company {
+  id            String   @id @default(cuid())
+  name          String
+  siret         String?
+  vatNumber     String?
+  address       String?
+  postalCode    String?
+  city          String?
+  country       String   @default("France")
+  phone         String?
+  email         String?
+  website       String?
+  currency      String   @default("EUR")
+  logoPath      String?
+  fiscalYearStart DateTime
+  fiscalYearEnd   DateTime
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("company")
+}
+
+model User {
+  id            String               @id @default(cuid())
+  email         String               @unique
+  name          String
+  passwordHash  String
+  isActive      Boolean              @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  roles         UserRole[]
+  sessions      Session[]
+  auditLogs     AuditLog[]
+  resetTokens   PasswordResetToken[]
+
+  @@map("user")
+}
+
+model PasswordResetToken {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdBy   String? // userId admin, null si self-service
+  requestedIp String?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_token")
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  code        String           @unique // ADMIN, USER, MANAGER, ...
+  name        String
+  description String?
+  isSystem    Boolean          @default(false) // ADMIN/USER non supprimables
+  version     Int              @default(1)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("role")
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique // "components.read", ...
+  module      String
+  description String
+  roles       RolePermission[]
+
+  @@map("permission")
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_role")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permission")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  ip        String?
+  userAgent String?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("session")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String // CREATE / UPDATE / DELETE / LOGIN / LOGOUT / POST / ...
+  entity    String
+  entityId  String?
+  diff      String? // JSON
+  ip        String?
+  userAgent String?
+  at        DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([userId])
+  @@index([at])
+  @@map("audit_log")
+}
+
+// Sequences pour codes auto (articles, OF, factures...)
+model Sequence {
+  key   String @id
+  value Int    @default(0)
+
+  @@map("sequence")
+}
+
+// Fichiers stockes (datasheets, logos, PDFs)
+model StoredFile {
+  id           String    @id @default(cuid())
+  originalName String
+  mimeType     String
+  size         Int
+  path         String
+  uploadedBy   String?
+  createdAt    DateTime  @default(now())
+  articles     Article[]
+
+  @@map("stored_file")
+}
+
+// =====================================================================
+// REFERENTIELS
+// =====================================================================
+
+model Location {
+  id          String     @id @default(cuid())
+  code        String     @unique
+  name        String
+  description String?
+  parentId    String?
+  parent      Location?  @relation("LocationHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Location[] @relation("LocationHierarchy")
+  stockUnits  StockUnit[]
+  deletedAt   DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("location")
+}
+
+model Supplier {
+  id         String              @id @default(cuid())
+  code       String              @unique
+  name       String
+  vatNumber  String?
+  address    String?
+  postalCode String?
+  city       String?
+  country    String              @default("France")
+  phone      String?
+  email      String?
+  website    String?
+  paymentTerms String?
+  notes      String?
+  contacts   SupplierContact[]
+  articles   ArticleSupplier[]
+  orders     SupplierOrder[]
+  invoices   Invoice[]
+  accountCode String?  // compte fournisseur (ex: 401XXX)
+  deletedAt  DateTime?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@map("supplier")
+}
+
+model SupplierContact {
+  id         String   @id @default(cuid())
+  supplierId String
+  firstName  String
+  lastName   String
+  email      String?
+  phone      String?
+  role       String?
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@map("supplier_contact")
+}
+
+model Customer {
+  id         String              @id @default(cuid())
+  code       String              @unique
+  name       String
+  vatNumber  String?
+  address    String?
+  postalCode String?
+  city       String?
+  country    String              @default("France")
+  phone      String?
+  email      String?
+  website    String?
+  paymentTerms String?
+  notes      String?
+  accountCode String? // compte client (411XXX)
+  contacts   CustomerContact[]
+  orders     CustomerOrder[]
+  invoices   Invoice[]
+  deletedAt  DateTime?
+  createdAt  DateTime            @default(now())
+  updatedAt  DateTime            @updatedAt
+
+  @@map("customer")
+}
+
+model CustomerContact {
+  id         String   @id @default(cuid())
+  customerId String
+  firstName  String
+  lastName   String
+  email      String?
+  phone      String?
+  role       String?
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@map("customer_contact")
+}
+
+model Unit {
+  id       String    @id @default(cuid())
+  code     String    @unique // pcs, m, kg, ...
+  name     String
+  isBase   Boolean   @default(false)
+  articles Article[]
+
+  @@map("unit")
+}
+
+model VatRate {
+  id        String   @id @default(cuid())
+  code      String   @unique // TVA20, TVA10, TVA55, TVA21, TVA0
+  name      String
+  rate      Float // 20, 10, 5.5, 2.1, 0
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  customerOrderLines CustomerOrderLine[]
+  invoiceLines       InvoiceLine[]
+
+  @@map("vat_rate")
+}
+
+// =====================================================================
+// COMPOSANTS CMS (SQLite = pas d'enum natif, on utilise String)
+// ComponentType valeurs: RESISTOR | CAPACITOR | INDUCTOR | IC | TRANSISTOR | DIODE | CONNECTOR | PCB | MECHANICAL | OTHER
+// PackagingState valeurs: REEL | BOBINE | BANDE | RESTE | UNITAIRE
+// =====================================================================
+
+model Article {
+  id              String   @id @default(cuid())
+  codeArticle     String   @unique // C000001
+  mpn             String?
+  description     String
+  componentType   String // stocke valeur enum (SQLite pas d'enum natif)
+  format          String? // 0402, 0603, QFN48, ...
+  value           String? // 10kOhm, 100nF, ...
+  defaultUnitId   String?
+  defaultUnit     Unit?    @relation(fields: [defaultUnitId], references: [id])
+  datasheetFileId String?
+  datasheet       StoredFile? @relation(fields: [datasheetFileId], references: [id])
+  stockAlert      Int      @default(0)
+  lastPurchasePrice Float?
+  notes           String?
+
+  suppliers    ArticleSupplier[]
+  equivalencesA ArticleEquivalence[] @relation("ArticleA")
+  equivalencesB ArticleEquivalence[] @relation("ArticleB")
+  stockUnits   StockUnit[]
+  bomLines     BomLine[]
+  ofReservations OfReservation[]
+
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([componentType])
+  @@map("article")
+}
+
+model ArticleSupplier {
+  id           String   @id @default(cuid())
+  articleId    String
+  supplierId   String
+  supplierRef  String? // reference du fournisseur pour cet article
+  priceHT      Float
+  currency     String   @default("EUR")
+  moq          Int      @default(1)
+  packaging    String?
+  leadTimeDays Int      @default(0)
+  isPreferred  Boolean  @default(false)
+  article      Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  supplier     Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  orderLines   SupplierOrderLine[]
+
+  @@unique([articleId, supplierId])
+  @@map("article_supplier")
+}
+
+model ArticleEquivalence {
+  id         String  @id @default(cuid())
+  articleAId String
+  articleBId String
+  note       String?
+  articleA   Article @relation("ArticleA", fields: [articleAId], references: [id], onDelete: Cascade)
+  articleB   Article @relation("ArticleB", fields: [articleBId], references: [id], onDelete: Cascade)
+
+  @@unique([articleAId, articleBId])
+  @@map("article_equivalence")
+}
+
+// =====================================================================
+// STOCK
+// =====================================================================
+
+model StockUnit {
+  id            String         @id @default(cuid())
+  codeUnique    String         @unique
+  articleId     String
+  locationId    String?
+  qtyOnHand     Float          @default(0)
+  qtyReserved   Float          @default(0)
+  lotNumber     String?
+  packagingState String        @default("UNITAIRE")
+  receivedAt    DateTime?
+  expiresAt     DateTime?
+  supplierOrderLineId String?
+  article       Article        @relation(fields: [articleId], references: [id], onDelete: Restrict)
+  location      Location?      @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  supplierOrderLine SupplierOrderLine? @relation(fields: [supplierOrderLineId], references: [id], onDelete: SetNull)
+  movements     StockMovement[]
+  consumptions  OfConsumption[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([articleId])
+  @@index([locationId])
+  @@map("stock_unit")
+}
+
+model StockMovement {
+  id                  String   @id @default(cuid())
+  stockUnitId         String
+  type                String // IN / OUT / RESERVE / RELEASE / TRANSFER / ADJUST
+  qty                 Float
+  ofId                String?
+  customerOrderLineId String?
+  supplierOrderLineId String?
+  fromLocationId      String?
+  toLocationId        String?
+  userId              String?
+  reason              String?
+  at                  DateTime @default(now())
+  stockUnit           StockUnit @relation(fields: [stockUnitId], references: [id], onDelete: Cascade)
+
+  @@index([stockUnitId])
+  @@index([ofId])
+  @@index([at])
+  @@map("stock_movement")
+}
+
+// =====================================================================
+// BOM / PRODUITS
+// =====================================================================
+
+model Product {
+  id            String   @id @default(cuid())
+  code          String   @unique
+  name          String
+  description   String?
+  salePriceHT   Float?
+  boms          Bom[]
+  orderLines    CustomerOrderLine[]
+  manufacturingOrders ManufacturingOrder[]
+  deletedAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("product")
+}
+
+model Bom {
+  id        String   @id @default(cuid())
+  productId String
+  version   String
+  isActive  Boolean  @default(false)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  lines     BomLine[]
+  manufacturingOrders ManufacturingOrder[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, version])
+  @@map("bom")
+}
+
+model BomLine {
+  id          String  @id @default(cuid())
+  bomId       String
+  articleId   String
+  qtyPerUnit  Float
+  reference   String? // designation PCB (R1, C3, U2)
+  notes       String?
+  bom         Bom     @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  article     Article @relation(fields: [articleId], references: [id], onDelete: Restrict)
+
+  @@map("bom_line")
+}
+
+// =====================================================================
+// FABRICATION (OF)
+// =====================================================================
+
+model ManufacturingOrder {
+  id              String    @id @default(cuid())
+  code            String    @unique
+  productId       String
+  bomId           String
+  qty             Int
+  status          String    @default("DRAFT") // DRAFT/PLANNED/RESERVED/IN_PROGRESS/DONE/CANCELLED
+  plannedStart    DateTime?
+  plannedEnd      DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  customerOrderId String?
+  notes           String?
+  product         Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  bom             Bom      @relation(fields: [bomId], references: [id], onDelete: Restrict)
+  customerOrder   CustomerOrder? @relation(fields: [customerOrderId], references: [id], onDelete: SetNull)
+  reservations    OfReservation[]
+  consumptions    OfConsumption[]
+  steps           OfStep[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("manufacturing_order")
+}
+
+model OfReservation {
+  id          String   @id @default(cuid())
+  ofId        String
+  articleId   String
+  qtyNeeded   Float
+  qtyReserved Float    @default(0)
+  qtyConsumed Float    @default(0)
+  manufacturingOrder ManufacturingOrder @relation(fields: [ofId], references: [id], onDelete: Cascade)
+  article     Article  @relation(fields: [articleId], references: [id], onDelete: Restrict)
+
+  @@unique([ofId, articleId])
+  @@map("of_reservation")
+}
+
+model OfConsumption {
+  id          String   @id @default(cuid())
+  ofId        String
+  stockUnitId String
+  qty         Float
+  at          DateTime @default(now())
+  manufacturingOrder ManufacturingOrder @relation(fields: [ofId], references: [id], onDelete: Cascade)
+  stockUnit   StockUnit @relation(fields: [stockUnitId], references: [id], onDelete: Restrict)
+
+  @@map("of_consumption")
+}
+
+model OfStep {
+  id     String   @id @default(cuid())
+  ofId   String
+  order  Int
+  name   String
+  status String   @default("PENDING") // PENDING / IN_PROGRESS / DONE / SKIPPED
+  doneAt DateTime?
+  manufacturingOrder ManufacturingOrder @relation(fields: [ofId], references: [id], onDelete: Cascade)
+
+  @@map("of_step")
+}
+
+// =====================================================================
+// COMMANDES CLIENT
+// =====================================================================
+
+model CustomerOrder {
+  id         String   @id @default(cuid())
+  code       String   @unique
+  customerId String
+  status     String   @default("QUOTE") // QUOTE/CONFIRMED/IN_PRODUCTION/READY/SHIPPED/INVOICED/CANCELLED
+  orderDate  DateTime @default(now())
+  dueDate    DateTime?
+  notes      String?
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  lines      CustomerOrderLine[]
+  manufacturingOrders ManufacturingOrder[]
+  invoices   Invoice[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("customer_order")
+}
+
+model CustomerOrderLine {
+  id           String   @id @default(cuid())
+  orderId      String
+  productId    String
+  qty          Int
+  unitPriceHT  Float
+  vatRateId    String?
+  description  String?
+  order        CustomerOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  vatRate      VatRate? @relation(fields: [vatRateId], references: [id])
+
+  @@map("customer_order_line")
+}
+
+// =====================================================================
+// COMMANDES FOURNISSEUR
+// =====================================================================
+
+model SupplierOrder {
+  id         String   @id @default(cuid())
+  code       String   @unique
+  supplierId String
+  status     String   @default("DRAFT") // DRAFT/SENT/PARTIAL/RECEIVED/CANCELLED
+  orderDate  DateTime @default(now())
+  expectedAt DateTime?
+  notes      String?
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  lines      SupplierOrderLine[]
+  receptions Reception[]
+  invoices   Invoice[]
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("supplier_order")
+}
+
+model SupplierOrderLine {
+  id                String   @id @default(cuid())
+  orderId           String
+  articleSupplierId String
+  qtyOrdered        Float
+  qtyReceived       Float    @default(0)
+  unitPriceHT       Float
+  vatRateCode       String   @default("TVA20")
+  order             SupplierOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  articleSupplier   ArticleSupplier @relation(fields: [articleSupplierId], references: [id], onDelete: Restrict)
+  receptionLines    ReceptionLine[]
+  stockUnits        StockUnit[]
+
+  @@map("supplier_order_line")
+}
+
+model Reception {
+  id              String   @id @default(cuid())
+  supplierOrderId String
+  receivedAt      DateTime @default(now())
+  notes           String?
+  supplierOrder   SupplierOrder @relation(fields: [supplierOrderId], references: [id], onDelete: Cascade)
+  lines           ReceptionLine[]
+
+  @@map("reception")
+}
+
+model ReceptionLine {
+  id                  String   @id @default(cuid())
+  receptionId         String
+  supplierOrderLineId String
+  qty                 Float
+  lotNumber           String?
+  locationId          String?
+  reception           Reception  @relation(fields: [receptionId], references: [id], onDelete: Cascade)
+  supplierOrderLine   SupplierOrderLine @relation(fields: [supplierOrderLineId], references: [id], onDelete: Restrict)
+
+  @@map("reception_line")
+}
+
+// =====================================================================
+// FACTURATION
+// =====================================================================
+
+model Invoice {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  type            String // SALE / PURCHASE
+  customerId      String?
+  supplierId      String?
+  customerOrderId String?
+  supplierOrderId String?
+  issueDate       DateTime @default(now())
+  dueDate         DateTime?
+  status          String   @default("DRAFT") // DRAFT / ISSUED / PAID / PARTIAL / CANCELLED
+  totalHT         Float    @default(0)
+  totalVat        Float    @default(0)
+  totalTTC        Float    @default(0)
+  notes           String?
+  customer        Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  supplier        Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  customerOrder   CustomerOrder? @relation(fields: [customerOrderId], references: [id], onDelete: SetNull)
+  supplierOrder   SupplierOrder? @relation(fields: [supplierOrderId], references: [id], onDelete: SetNull)
+  lines           InvoiceLine[]
+  payments        Payment[]
+  journalEntryId  String?
+  journalEntry    JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("invoice")
+}
+
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  description String
+  qty         Float
+  unitPriceHT Float
+  vatRateId   String?
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  vatRate     VatRate? @relation(fields: [vatRateId], references: [id])
+
+  @@map("invoice_line")
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  invoiceId       String
+  method          String // TRANSFER / CARD / CASH / CHECK
+  amount          Float
+  at              DateTime @default(now())
+  reference       String?
+  journalEntryId  String?
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  journalEntry    JournalEntry? @relation(fields: [journalEntryId], references: [id], onDelete: SetNull)
+
+  @@map("payment")
+}
+
+// =====================================================================
+// COMPTABILITE (PCG FR)
+// =====================================================================
+
+model FiscalYear {
+  id        String   @id @default(cuid())
+  label     String
+  startDate DateTime
+  endDate   DateTime
+  isClosed  Boolean  @default(false)
+  journalEntries JournalEntry[]
+
+  @@map("fiscal_year")
+}
+
+model Account {
+  id         String   @id @default(cuid())
+  number     String   @unique // PCG (ex: 607, 44566, 401)
+  label      String
+  type       String // ASSET / LIABILITY / EXPENSE / REVENUE / EQUITY
+  parentId   String?
+  parent     Account? @relation("AccountTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children   Account[] @relation("AccountTree")
+  lines      JournalEntryLine[]
+  createdAt  DateTime @default(now())
+
+  @@map("account")
+}
+
+model Journal {
+  id      String @id @default(cuid())
+  code    String @unique // AC / VE / BQ / CA / OD
+  name    String
+  entries JournalEntry[]
+
+  @@map("journal")
+}
+
+model JournalEntry {
+  id           String   @id @default(cuid())
+  journalId    String
+  fiscalYearId String
+  date         DateTime
+  pieceRef     String?
+  label        String?
+  isPosted     Boolean  @default(false)
+  postedAt     DateTime?
+  journal      Journal  @relation(fields: [journalId], references: [id], onDelete: Restrict)
+  fiscalYear   FiscalYear @relation(fields: [fiscalYearId], references: [id], onDelete: Restrict)
+  lines        JournalEntryLine[]
+  invoices     Invoice[]
+  payments     Payment[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([date])
+  @@map("journal_entry")
+}
+
+model JournalEntryLine {
+  id        String  @id @default(cuid())
+  entryId   String
+  accountId String
+  debit     Float   @default(0)
+  credit    Float   @default(0)
+  label     String?
+  entry     JournalEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@map("journal_entry_line")
+}
+
+// =====================================================================
+// WATCH FOLDERS : dossiers surveilles pour import automatique CSV/JSON
+// =====================================================================
+
+model WatchFolder {
+  id               String    @id @default(cuid())
+  name             String
+  path             String    // chemin absolu ou relatif au repertoire du serveur
+  fileType         String    // "csv" | "json"
+  entity           String    // "article" (extensible)
+  enabled          Boolean   @default(true)
+  pollIntervalSec  Int       @default(60)
+  csvDelimiter     String    @default(",")
+  fieldMapping     String?   // JSON: { cibleInterne: "nomColonneSource" }
+  processedSubdir  String    @default(".processed")
+  errorSubdir      String    @default(".errors")
+  lastScanAt       DateTime?
+  lastResult       String?   // court resume du dernier scan
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  runs             WatchRun[]
+
+  @@map("watch_folder")
+}
+
+model WatchRun {
+  id              String       @id @default(cuid())
+  watchFolderId   String
+  file            String
+  status          String       // "success" | "partial" | "error"
+  createdCount    Int          @default(0)
+  errorCount      Int          @default(0)
+  message         String?
+  at              DateTime     @default(now())
+
+  watchFolder     WatchFolder  @relation(fields: [watchFolderId], references: [id], onDelete: Cascade)
+
+  @@index([watchFolderId, at])
+  @@map("watch_run")
+}

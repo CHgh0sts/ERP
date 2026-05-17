@@ -1,0 +1,177 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { createSupplier, updateSupplier, deleteSupplier } from "./actions";
+
+type Sup = {
+  id: string;
+  code: string;
+  name: string;
+  vatNumber: string;
+  address: string;
+  postalCode: string;
+  city: string;
+  country: string;
+  phone: string;
+  email: string;
+  website: string;
+  paymentTerms: string;
+  notes: string;
+  accountCode: string;
+};
+
+const empty: Sup = {
+  id: "",
+  code: "",
+  name: "",
+  vatNumber: "",
+  address: "",
+  postalCode: "",
+  city: "",
+  country: "France",
+  phone: "",
+  email: "",
+  website: "",
+  paymentTerms: "",
+  notes: "",
+  accountCode: "",
+};
+
+export default function SupplierClient(props: { mode: "create" | "edit"; supplier?: Sup }) {
+  const [open, setOpen] = useState(false);
+  const [pending, start] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+  const [s, setS] = useState<Sup>(props.supplier ?? empty);
+
+  async function submit() {
+    setErr(null);
+    start(async () => {
+      try {
+        if (props.mode === "create") {
+          await createSupplier({
+            code: s.code || null,
+            name: s.name,
+            vatNumber: s.vatNumber,
+            address: s.address,
+            postalCode: s.postalCode,
+            city: s.city,
+            country: s.country,
+            phone: s.phone,
+            email: s.email,
+            website: s.website,
+            paymentTerms: s.paymentTerms,
+            notes: s.notes,
+            accountCode: s.accountCode,
+          });
+          setS(empty);
+        } else if (props.supplier) {
+          await updateSupplier(props.supplier.id, {
+            name: s.name,
+            vatNumber: s.vatNumber,
+            address: s.address,
+            postalCode: s.postalCode,
+            city: s.city,
+            country: s.country,
+            phone: s.phone,
+            email: s.email,
+            website: s.website,
+            paymentTerms: s.paymentTerms,
+            notes: s.notes,
+            accountCode: s.accountCode,
+          });
+        }
+        setOpen(false);
+      } catch (e) {
+        setErr((e as Error).message);
+      }
+    });
+  }
+
+  async function onDelete() {
+    if (!props.supplier) return;
+    if (!confirm("Supprimer ce fournisseur ?")) return;
+    start(async () => {
+      try {
+        await deleteSupplier(props.supplier!.id);
+        setOpen(false);
+      } catch (e) {
+        setErr((e as Error).message);
+      }
+    });
+  }
+
+  if (!open) {
+    return (
+      <Button size="sm" variant={props.mode === "create" ? "default" : "outline"} onClick={() => setOpen(true)}>
+        {props.mode === "create" ? "+ Nouveau fournisseur" : "Modifier"}
+      </Button>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="bg-background rounded-lg p-6 w-full max-w-xl space-y-3 max-h-[90vh] overflow-y-auto">
+        <h3 className="font-bold text-lg">{props.mode === "create" ? "Nouveau fournisseur" : "Modifier"}</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Code (auto si vide)" value={s.code} onChange={(v) => setS({ ...s, code: v })} disabled={props.mode === "edit"} />
+          <Field label="Nom" value={s.name} onChange={(v) => setS({ ...s, name: v })} />
+          <Field label="N TVA" value={s.vatNumber} onChange={(v) => setS({ ...s, vatNumber: v })} />
+          <Field label="Compte comptable (401...)" value={s.accountCode} onChange={(v) => setS({ ...s, accountCode: v })} />
+          <Field label="Adresse" value={s.address} onChange={(v) => setS({ ...s, address: v })} />
+          <Field label="Pays" value={s.country} onChange={(v) => setS({ ...s, country: v })} />
+          <Field label="Code postal" value={s.postalCode} onChange={(v) => setS({ ...s, postalCode: v })} />
+          <Field label="Ville" value={s.city} onChange={(v) => setS({ ...s, city: v })} />
+          <Field label="Telephone" value={s.phone} onChange={(v) => setS({ ...s, phone: v })} />
+          <Field label="Email" value={s.email} onChange={(v) => setS({ ...s, email: v })} />
+          <Field label="Site web" value={s.website} onChange={(v) => setS({ ...s, website: v })} />
+          <Field label="Conditions de paiement" value={s.paymentTerms} onChange={(v) => setS({ ...s, paymentTerms: v })} />
+        </div>
+        <div>
+          <Label>Notes</Label>
+          <Textarea rows={2} value={s.notes} onChange={(e) => setS({ ...s, notes: e.target.value })} />
+        </div>
+        {err && <p className="text-sm text-destructive">{err}</p>}
+        <div className="flex justify-between border-t pt-2">
+          <div>
+            {props.mode === "edit" && (
+              <Button variant="destructive" size="sm" onClick={onDelete} disabled={pending}>
+                Supprimer
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+              Annuler
+            </Button>
+            <Button onClick={submit} disabled={pending}>
+              {pending ? "..." : "Enregistrer"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      <Input value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} />
+    </div>
+  );
+}
