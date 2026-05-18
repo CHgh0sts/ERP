@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Modal } from "@/components/ui/modal";
+import { Alert } from "@/components/ui/alert";
+import { CrudModalFooter } from "@/components/ui/crud-modal-footer";
+import { Plus, Pencil } from "lucide-react";
 import { createCustomer, updateCustomer, deleteCustomer } from "./actions";
 
 type Cus = {
@@ -77,56 +81,61 @@ export default function CustomerClient(props: { mode: "create" | "edit"; custome
     });
   }
 
-  if (!open) {
-    return (
-      <Button size="sm" variant={props.mode === "create" ? "default" : "outline"} onClick={() => setOpen(true)}>
-        {props.mode === "create" ? "+ Nouveau client" : "Modifier"}
-      </Button>
-    );
-  }
-
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-background rounded-lg p-6 w-full max-w-xl space-y-3 max-h-[90vh] overflow-y-auto">
-        <h3 className="font-bold text-lg">{props.mode === "create" ? "Nouveau client" : "Modifier"}</h3>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Code (auto si vide)" value={c.code} onChange={(v) => setC({ ...c, code: v })} disabled={props.mode === "edit"} />
-          <Field label="Nom" value={c.name} onChange={(v) => setC({ ...c, name: v })} />
-          <Field label="N TVA" value={c.vatNumber} onChange={(v) => setC({ ...c, vatNumber: v })} />
-          <Field label="Compte comptable (411...)" value={c.accountCode} onChange={(v) => setC({ ...c, accountCode: v })} />
-          <Field label="Adresse" value={c.address} onChange={(v) => setC({ ...c, address: v })} />
-          <Field label="Pays" value={c.country} onChange={(v) => setC({ ...c, country: v })} />
-          <Field label="Code postal" value={c.postalCode} onChange={(v) => setC({ ...c, postalCode: v })} />
-          <Field label="Ville" value={c.city} onChange={(v) => setC({ ...c, city: v })} />
-          <Field label="Telephone" value={c.phone} onChange={(v) => setC({ ...c, phone: v })} />
-          <Field label="Email" value={c.email} onChange={(v) => setC({ ...c, email: v })} />
-          <Field label="Site web" value={c.website} onChange={(v) => setC({ ...c, website: v })} />
-          <Field label="Conditions de paiement" value={c.paymentTerms} onChange={(v) => setC({ ...c, paymentTerms: v })} />
-        </div>
-        <div>
-          <Label>Notes</Label>
-          <Textarea rows={2} value={c.notes} onChange={(e) => setC({ ...c, notes: e.target.value })} />
-        </div>
-        {err && <p className="text-sm text-destructive">{err}</p>}
-        <div className="flex justify-between border-t pt-2">
+    <>
+      <Button size="sm" variant={props.mode === "create" ? "default" : "outline"} onClick={() => setOpen(true)}>
+        {props.mode === "create" ? (
+          <>
+            <Plus className="h-4 w-4" /> Nouveau client
+          </>
+        ) : (
+          <>
+            <Pencil className="h-3.5 w-3.5" /> Modifier
+          </>
+        )}
+      </Button>
+
+      <Modal
+        open={open}
+        onClose={() => !pending && setOpen(false)}
+        title={props.mode === "create" ? "Nouveau client" : "Modifier"}
+        size="lg"
+        footer={
+          <CrudModalFooter
+            pending={pending}
+            onClose={() => setOpen(false)}
+            onSubmit={submit}
+            onDelete={props.mode === "edit" ? onDelete : undefined}
+          />
+        }
+      >
+        <div className="space-y-4">
+          {err && (
+            <Alert variant="destructive" title="Erreur">
+              {err}
+            </Alert>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Code (auto si vide)" value={c.code} onChange={(v) => setC({ ...c, code: v })} disabled={props.mode === "edit"} />
+            <Field label="Nom" value={c.name} onChange={(v) => setC({ ...c, name: v })} />
+            <Field label="N TVA" value={c.vatNumber} onChange={(v) => setC({ ...c, vatNumber: v })} />
+            <Field label="Compte comptable (411...)" value={c.accountCode} onChange={(v) => setC({ ...c, accountCode: v })} />
+            <Field label="Adresse" value={c.address} onChange={(v) => setC({ ...c, address: v })} />
+            <Field label="Pays" value={c.country} onChange={(v) => setC({ ...c, country: v })} />
+            <Field label="Code postal" value={c.postalCode} onChange={(v) => setC({ ...c, postalCode: v })} />
+            <Field label="Ville" value={c.city} onChange={(v) => setC({ ...c, city: v })} />
+            <Field label="Telephone" value={c.phone} onChange={(v) => setC({ ...c, phone: v })} />
+            <Field label="Email" value={c.email} onChange={(v) => setC({ ...c, email: v })} />
+            <Field label="Site web" value={c.website} onChange={(v) => setC({ ...c, website: v })} />
+            <Field label="Conditions de paiement" value={c.paymentTerms} onChange={(v) => setC({ ...c, paymentTerms: v })} />
+          </div>
           <div>
-            {props.mode === "edit" && (
-              <Button variant="destructive" size="sm" onClick={onDelete} disabled={pending}>
-                Supprimer
-              </Button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
-              Annuler
-            </Button>
-            <Button onClick={submit} disabled={pending}>
-              {pending ? "..." : "Enregistrer"}
-            </Button>
+            <Label>Notes</Label>
+            <Textarea rows={2} value={c.notes} onChange={(e) => setC({ ...c, notes: e.target.value })} />
           </div>
         </div>
-      </div>
-    </div>
+      </Modal>
+    </>
   );
 }
 

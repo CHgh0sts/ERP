@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Modal } from "@/components/ui/modal";
+import { Alert } from "@/components/ui/alert";
+import { CrudModalFooter } from "@/components/ui/crud-modal-footer";
+import { Plus, Pencil } from "lucide-react";
 import { createLocation, updateLocation, deleteLocation } from "./actions";
 
 type Loc = { id: string; code: string; name: string; parentId?: string };
@@ -50,56 +54,61 @@ export default function LocationsClient(props: {
     });
   }
 
-  if (!open) {
-    return (
-      <Button size="sm" variant={props.mode === "create" ? "default" : "ghost"} onClick={() => setOpen(true)}>
-        {props.mode === "create" ? "+ Nouvel emplacement" : "Modifier"}
-      </Button>
-    );
-  }
-
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-      <div className="bg-background rounded-lg p-6 w-full max-w-md space-y-3">
-        <h3 className="font-bold text-lg">{props.mode === "create" ? "Nouvel emplacement" : "Modifier"}</h3>
-        <div>
-          <Label>Code</Label>
-          <Input value={code} onChange={(e) => setCode(e.target.value)} />
-        </div>
-        <div>
-          <Label>Nom</Label>
-          <Input value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div>
-          <Label>Parent (optionnel)</Label>
-          <Select value={parentId} onChange={(e) => setParentId(e.target.value)}>
-            <option value="">(racine)</option>
-            {props.allLocations.map((l) => (
-              <option key={l.id} value={l.id}>
-                {l.code} - {l.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-        {err && <p className="text-sm text-destructive">{err}</p>}
-        <div className="flex justify-between border-t pt-2">
-          <div>
-            {props.mode === "edit" && (
-              <Button variant="destructive" size="sm" onClick={onDelete} disabled={pending}>
-                Supprimer
-              </Button>
-            )}
+    <>
+      <Button size="sm" variant={props.mode === "create" ? "default" : "ghost"} onClick={() => setOpen(true)}>
+        {props.mode === "create" ? (
+          <>
+            <Plus className="h-4 w-4" /> Nouvel emplacement
+          </>
+        ) : (
+          <>
+            <Pencil className="h-3.5 w-3.5" /> Modifier
+          </>
+        )}
+      </Button>
+
+      <Modal
+        open={open}
+        onClose={() => !pending && setOpen(false)}
+        title={props.mode === "create" ? "Nouvel emplacement" : "Modifier l'emplacement"}
+        size="md"
+        footer={
+          <CrudModalFooter
+            pending={pending}
+            onClose={() => setOpen(false)}
+            onSubmit={submit}
+            onDelete={props.mode === "edit" ? onDelete : undefined}
+          />
+        }
+      >
+        <div className="space-y-4">
+          {err && (
+            <Alert variant="destructive" title="Erreur">
+              {err}
+            </Alert>
+          )}
+          <div className="space-y-1.5">
+            <Label>Code</Label>
+            <Input value={code} onChange={(e) => setCode(e.target.value)} />
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
-              Annuler
-            </Button>
-            <Button onClick={submit} disabled={pending}>
-              {pending ? "..." : "Enregistrer"}
-            </Button>
+          <div className="space-y-1.5">
+            <Label>Nom</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Parent (optionnel)</Label>
+            <Select value={parentId} onChange={(e) => setParentId(e.target.value)}>
+              <option value="">(racine)</option>
+              {props.allLocations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.code} - {l.name}
+                </option>
+              ))}
+            </Select>
           </div>
         </div>
-      </div>
-    </div>
+      </Modal>
+    </>
   );
 }

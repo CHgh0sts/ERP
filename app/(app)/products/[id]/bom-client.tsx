@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
+import { Modal } from "@/components/ui/modal";
+import { Alert } from "@/components/ui/alert";
+import { CrudModalFooter } from "@/components/ui/crud-modal-footer";
+import { Plus, Pencil } from "lucide-react";
 import { createBom, updateBom, deleteBom, setBomActive } from "../actions";
 
 type Article = { id: string; codeArticle: string; description: string };
@@ -37,6 +41,7 @@ export default function BomClient(props: {
   }
 
   async function submit() {
+    if (lines.length === 0) return;
     setErr(null);
     start(async () => {
       try {
@@ -74,8 +79,8 @@ export default function BomClient(props: {
     });
   }
 
-  if (!open) {
-    return (
+  return (
+    <>
       <div className="flex gap-2">
         {props.mode === "edit" && props.bom && !props.bom.isActive && (
           <Button size="sm" variant="outline" onClick={activate} disabled={pending}>
@@ -83,100 +88,103 @@ export default function BomClient(props: {
           </Button>
         )}
         <Button size="sm" variant={props.mode === "create" ? "default" : "outline"} onClick={() => setOpen(true)}>
-          {props.mode === "create" ? "+ Nouvelle BOM" : "Modifier"}
+          {props.mode === "create" ? (
+            <>
+              <Plus className="h-4 w-4" /> Nouvelle BOM
+            </>
+          ) : (
+            <>
+              <Pencil className="h-3.5 w-3.5" /> Modifier
+            </>
+          )}
         </Button>
       </div>
-    );
-  }
 
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4 overflow-y-auto">
-      <div className="bg-background rounded-lg p-6 w-full max-w-3xl space-y-3 max-h-[90vh] overflow-y-auto">
-        <h3 className="font-bold text-lg">{props.mode === "create" ? "Nouvelle BOM" : `Modifier BOM v${props.bom?.version}`}</h3>
-        <div className="grid grid-cols-3 gap-3">
-          <div>
-            <Label>Version</Label>
-            <Input value={version} onChange={(e) => setVersion(e.target.value)} />
-          </div>
-          <div className="flex items-end">
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
-              Activer (desactive les autres versions)
-            </label>
-          </div>
-          <div className="flex items-end justify-end">
-            <Button size="sm" onClick={addLine} disabled={props.articles.length === 0}>
-              + Ligne
-            </Button>
-          </div>
-        </div>
-
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs uppercase text-muted-foreground">
-            <tr>
-              <th className="py-1">Ref PCB</th>
-              <th>Composant</th>
-              <th>Qte / unite</th>
-              <th>Notes</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {lines.map((l, i) => (
-              <tr key={i} className="border-t">
-                <td className="py-1">
-                  <Input value={l.reference} onChange={(e) => setLine(i, { reference: e.target.value })} placeholder="R1, C3..." />
-                </td>
-                <td>
-                  <Select value={l.articleId} onChange={(e) => setLine(i, { articleId: e.target.value })}>
-                    {props.articles.map((a) => (
-                      <option key={a.id} value={a.id}>
-                        {a.codeArticle} - {a.description}
-                      </option>
-                    ))}
-                  </Select>
-                </td>
-                <td>
-                  <Input
-                    type="number"
-                    step="0.000001"
-                    value={l.qtyPerUnit}
-                    onChange={(e) => setLine(i, { qtyPerUnit: Number(e.target.value) || 0 })}
-                  />
-                </td>
-                <td>
-                  <Input value={l.notes} onChange={(e) => setLine(i, { notes: e.target.value })} />
-                </td>
-                <td>
-                  <Button size="sm" variant="ghost" onClick={() => removeLine(i)}>
-                    X
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        {err && <p className="text-sm text-destructive">{err}</p>}
-
-        <div className="flex justify-between border-t pt-2">
-          <div>
-            {props.mode === "edit" && (
-              <Button variant="destructive" size="sm" onClick={onDelete} disabled={pending}>
-                Supprimer
+      <Modal
+        open={open}
+        onClose={() => !pending && setOpen(false)}
+        title={props.mode === "create" ? "Nouvelle BOM" : `Modifier BOM v${props.bom?.version}`}
+        size="xl"
+        footer={
+          <CrudModalFooter
+            pending={pending}
+            onClose={() => setOpen(false)}
+            onSubmit={submit}
+            onDelete={props.mode === "edit" ? onDelete : undefined}
+          />
+        }
+      >
+        <div className="space-y-4">
+          {err && (
+            <Alert variant="destructive" title="Erreur">
+              {err}
+            </Alert>
+          )}
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <Label>Version</Label>
+              <Input value={version} onChange={(e) => setVersion(e.target.value)} />
+            </div>
+            <div className="flex items-end">
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+                Activer (desactive les autres versions)
+              </label>
+            </div>
+            <div className="flex items-end justify-end">
+              <Button size="sm" onClick={addLine} disabled={props.articles.length === 0}>
+                + Ligne
               </Button>
-            )}
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
-              Annuler
-            </Button>
-            <Button onClick={submit} disabled={pending || lines.length === 0}>
-              {pending ? "..." : "Enregistrer"}
-            </Button>
-          </div>
+
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase text-muted-foreground">
+              <tr>
+                <th className="py-1">Ref PCB</th>
+                <th>Composant</th>
+                <th>Qte / unite</th>
+                <th>Notes</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l, i) => (
+                <tr key={i} className="border-t">
+                  <td className="py-1">
+                    <Input value={l.reference} onChange={(e) => setLine(i, { reference: e.target.value })} placeholder="R1, C3..." />
+                  </td>
+                  <td>
+                    <Select value={l.articleId} onChange={(e) => setLine(i, { articleId: e.target.value })}>
+                      {props.articles.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.codeArticle} - {a.description}
+                        </option>
+                      ))}
+                    </Select>
+                  </td>
+                  <td>
+                    <Input
+                      type="number"
+                      step="0.000001"
+                      value={l.qtyPerUnit}
+                      onChange={(e) => setLine(i, { qtyPerUnit: Number(e.target.value) || 0 })}
+                    />
+                  </td>
+                  <td>
+                    <Input value={l.notes} onChange={(e) => setLine(i, { notes: e.target.value })} />
+                  </td>
+                  <td>
+                    <Button size="sm" variant="ghost" onClick={() => removeLine(i)}>
+                      X
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
-    </div>
+      </Modal>
+    </>
   );
 }
