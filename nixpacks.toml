@@ -1,0 +1,4 @@
+# Coolify / Nixpacks — limite memoire pour next build sur petits VPS
+[variables]
+NODE_OPTIONS = "--max-old-space-size=3072"
+NEXT_TELEMETRY_DISABLED = "1"

@@ -135,6 +135,18 @@ Depuis `Administration > Sauvegardes`, telechargez un ZIP contenant un dump SQL 
 
 Depuis `Comptabilite > Export FEC`, selectionnez un exercice pour telecharger le fichier conforme DGFiP (nommage `{SIREN}FEC{AAAAMMJJ}.txt`).
 
+## Deploiement (Coolify / Nixpacks)
+
+Variables d'environnement **runtime** obligatoires : `DATABASE_URL`, `JWT_SECRET`, `STORAGE_DIR` (et optionnellement `JWT_EXPIRES_IN`).
+
+Commande de demarrage recommandee :
+
+```bash
+npx prisma migrate deploy && npm start
+```
+
+Le fichier `nixpacks.toml` fixe `NODE_OPTIONS=--max-old-space-size=3072` pour limiter les echecs de build Next.js par manque de RAM. Sur un VPS tres petit, activez du swap (2–4 Go) ou augmentez la RAM du serveur de build.
+
 ## Notes
 
 - Le schema Prisma est portable : pour passer a un autre SGBD, changez le `provider` dans `prisma/schema.prisma` et l'URL dans `.env`.
