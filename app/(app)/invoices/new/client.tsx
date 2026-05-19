@@ -40,6 +40,7 @@ export default function NewInvoiceClient(props: {
   customerOrders: CustomerOrderSrc[];
   supplierOrders: SupplierOrderSrc[];
   onCancel?: () => void;
+  onSuccess?: () => void;
 }) {
   const router = useRouter();
   const defaultVat = props.vatRates.find((v) => v.isDefault) ?? props.vatRates[0];
@@ -135,6 +136,7 @@ export default function NewInvoiceClient(props: {
                 notes: notes || null,
                 lines,
               });
+        props.onSuccess?.();
         router.push(`/invoices/${r.id}`);
         router.refresh();
       } catch (e) {

@@ -95,3 +95,27 @@ export async function deleteCustomerOrder(id: string) {
   revalidatePath("/orders/customer");
   return { ok: true };
 }
+
+export async function getCustomerOrderFormData() {
+  await requirePermission("sales.read");
+  const [customers, products, vatRates] = await Promise.all([
+    prisma.customer.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } }),
+    prisma.product.findMany({ where: { deletedAt: null }, orderBy: { code: "asc" } }),
+    prisma.vatRate.findMany({ orderBy: { rate: "desc" } }),
+  ]);
+  return {
+    customers: customers.map((c) => ({ id: c.id, name: c.name })),
+    products: products.map((p) => ({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      salePriceHT: p.salePriceHT ?? 0,
+    })),
+    vatRates: vatRates.map((v) => ({
+      id: v.id,
+      code: v.code,
+      rate: v.rate,
+      isDefault: v.isDefault,
+    })),
+  };
+}

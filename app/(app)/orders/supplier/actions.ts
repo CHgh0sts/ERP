@@ -197,3 +197,23 @@ function vatCodeToRate(code: string): number {
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
+
+export async function getSupplierOrderFormData() {
+  await requirePermission("purchase.read");
+  const suppliers = await prisma.supplier.findMany({
+    where: { deletedAt: null },
+    orderBy: { name: "asc" },
+    include: { articles: { include: { article: true } } },
+  });
+  return suppliers.map((s) => ({
+    id: s.id,
+    name: s.name,
+    articles: s.articles.map((a) => ({
+      id: a.id,
+      priceHT: a.priceHT,
+      moq: a.moq,
+      codeArticle: a.article.codeArticle,
+      description: a.article.description,
+    })),
+  }));
+}

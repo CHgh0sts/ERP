@@ -27,11 +27,13 @@ export default function NewCustomerOrderClient({
   products,
   vatRates,
   onCancel,
+  onSuccess,
 }: {
   customers: Customer[];
   products: Product[];
   vatRates: VatRate[];
   onCancel?: () => void;
+  onSuccess?: () => void;
 }) {
   const router = useRouter();
   const defaultVat = vatRates.find((v) => v.isDefault) ?? vatRates[0];
@@ -72,6 +74,7 @@ export default function NewCustomerOrderClient({
           notes: notes || null,
           lines,
         });
+        onSuccess?.();
         router.push(`/orders/customer/${r.id}`);
         router.refresh();
       } catch (e) {

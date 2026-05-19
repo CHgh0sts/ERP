@@ -17,7 +17,15 @@ type Prod = {
   boms: { id: string; version: string; isActive: boolean }[];
 };
 
-export default function NewOfClient({ products, onCancel }: { products: Prod[]; onCancel?: () => void }) {
+export default function NewOfClient({
+  products,
+  onCancel,
+  onSuccess,
+}: {
+  products: Prod[];
+  onCancel?: () => void;
+  onSuccess?: () => void;
+}) {
   const router = useRouter();
   const [productId, setProductId] = useState(products[0].id);
   const product = products.find((p) => p.id === productId)!;
@@ -43,6 +51,7 @@ export default function NewOfClient({ products, onCancel }: { products: Prod[]; 
           notes: notes || null,
           customerOrderId: null,
         });
+        onSuccess?.();
         router.push(`/manufacturing/${r.id}`);
         router.refresh();
       } catch (e) {

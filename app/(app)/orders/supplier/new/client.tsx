@@ -18,9 +18,11 @@ type Line = { articleSupplierId: string; qtyOrdered: number; unitPriceHT: number
 export default function NewOrderClient({
   suppliers,
   onCancel,
+  onSuccess,
 }: {
   suppliers: Sup[];
   onCancel?: () => void;
+  onSuccess?: () => void;
 }) {
   const router = useRouter();
   const [supId, setSupId] = useState(suppliers[0]?.id ?? "");
@@ -62,6 +64,7 @@ export default function NewOrderClient({
           notes: notes || null,
           lines,
         });
+        onSuccess?.();
         router.push(`/orders/supplier/${r.id}`);
         router.refresh();
       } catch (e) {

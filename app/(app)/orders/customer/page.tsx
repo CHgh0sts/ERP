@@ -12,39 +12,20 @@ export const dynamic = "force-dynamic";
 
 export default async function CustomerOrdersPage() {
   await requirePermission("sales.read");
-  const [orders, customers, products, vatRates] = await Promise.all([
-    prisma.customerOrder.findMany({
+  const orders = await prisma.customerOrder.findMany({
     orderBy: { createdAt: "desc" },
     include: {
       customer: true,
       lines: { include: { vatRate: true } },
       _count: { select: { lines: true, manufacturingOrders: true, invoices: true } },
     },
-    }),
-    prisma.customer.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" } }),
-    prisma.product.findMany({ where: { deletedAt: null }, orderBy: { code: "asc" } }),
-    prisma.vatRate.findMany({ orderBy: { rate: "desc" } }),
-  ]);
+  });
 
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Commandes client</h1>
-        <CreateCustomerOrderDialog
-          customers={customers.map((c) => ({ id: c.id, name: c.name }))}
-          products={products.map((p) => ({
-            id: p.id,
-            code: p.code,
-            name: p.name,
-            salePriceHT: p.salePriceHT ?? 0,
-          }))}
-          vatRates={vatRates.map((v) => ({
-            id: v.id,
-            code: v.code,
-            rate: v.rate,
-            isDefault: v.isDefault,
-          }))}
-        />
+        <CreateCustomerOrderDialog />
       </div>
       <Card>
         <CardHeader>

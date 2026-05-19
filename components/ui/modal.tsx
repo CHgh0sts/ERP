@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -32,8 +33,17 @@ export function Modal({
   footer,
   disableClose,
 }: ModalProps) {
+  const [mounted, setMounted] = React.useState(false);
+
   React.useEffect(() => {
-    if (!open) return;
+    setMounted(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) {
+      document.body.style.overflow = "";
+      return;
+    }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape" && !disableClose) onClose();
     }
@@ -46,12 +56,12 @@ export function Modal({
     };
   }, [open, onClose, disableClose]);
 
-  if (!open) return null;
+  if (!mounted || !open) return null;
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto"
-      onMouseDown={(e) => {
+      className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-start justify-center p-4 overflow-y-auto"
+      onClick={(e) => {
         if (e.target === e.currentTarget && !disableClose) onClose();
       }}
     >
@@ -63,6 +73,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between px-6 py-4 border-b border-border">
           <div>
@@ -91,6 +102,7 @@ export function Modal({
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -387,3 +387,20 @@ export async function cancelOf(ofId: string) {
   revalidatePath("/stock");
   return { ok: true };
 }
+
+export async function getManufacturingOrderFormData() {
+  await requirePermission("of.read");
+  const products = await prisma.product.findMany({
+    where: { deletedAt: null },
+    include: { boms: { orderBy: { createdAt: "desc" } } },
+    orderBy: { code: "asc" },
+  });
+  return products
+    .filter((p) => p.boms.length > 0)
+    .map((p) => ({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      boms: p.boms.map((b) => ({ id: b.id, version: b.version, isActive: b.isActive })),
+    }));
+}
