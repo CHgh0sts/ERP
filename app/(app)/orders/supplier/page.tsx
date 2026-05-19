@@ -6,25 +6,44 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatEUR } from "@/lib/utils";
+import { CreateSupplierOrderDialog } from "./create-dialog";
 
 export const dynamic = "force-dynamic";
 
 export default async function SupplierOrdersPage() {
   await requirePermission("purchase.read");
-  const orders = await prisma.supplierOrder.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      supplier: true,
-      lines: { include: { articleSupplier: { include: { article: true } } } },
-    },
-  });
+  const [orders, suppliers] = await Promise.all([
+    prisma.supplierOrder.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        supplier: true,
+        lines: { include: { articleSupplier: { include: { article: true } } } },
+      },
+    }),
+    prisma.supplier.findMany({
+      where: { deletedAt: null },
+      orderBy: { name: "asc" },
+      include: { articles: { include: { article: true } } },
+    }),
+  ]);
+
+  const supplierOptions = suppliers.map((s) => ({
+    id: s.id,
+    name: s.name,
+    articles: s.articles.map((a) => ({
+      id: a.id,
+      priceHT: a.priceHT,
+      moq: a.moq,
+      codeArticle: a.article.codeArticle,
+      description: a.article.description,
+    })),
+  }));
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Commandes fournisseur</h1>
-        <Button asChild>
-          <Link href="/orders/supplier/new">+ Nouvelle commande</Link>
-        </Button>
+        <CreateSupplierOrderDialog suppliers={supplierOptions} />
       </div>
       <Card>
         <CardHeader>

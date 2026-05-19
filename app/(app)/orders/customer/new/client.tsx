@@ -26,10 +26,12 @@ export default function NewCustomerOrderClient({
   customers,
   products,
   vatRates,
+  onCancel,
 }: {
   customers: Customer[];
   products: Product[];
   vatRates: VatRate[];
+  onCancel?: () => void;
 }) {
   const router = useRouter();
   const defaultVat = vatRates.find((v) => v.isDefault) ?? vatRates[0];
@@ -195,7 +197,7 @@ export default function NewCustomerOrderClient({
       {err && <p className="text-sm text-destructive">{err}</p>}
 
       <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={() => router.back()}>
+        <Button variant="outline" onClick={() => (onCancel ? onCancel() : router.back())}>
           Annuler
         </Button>
         <Button onClick={submit} disabled={pending || lines.length === 0}>

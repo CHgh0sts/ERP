@@ -39,6 +39,7 @@ export default function NewInvoiceClient(props: {
   vatRates: VatRate[];
   customerOrders: CustomerOrderSrc[];
   supplierOrders: SupplierOrderSrc[];
+  onCancel?: () => void;
 }) {
   const router = useRouter();
   const defaultVat = props.vatRates.find((v) => v.isDefault) ?? props.vatRates[0];
@@ -275,7 +276,7 @@ export default function NewInvoiceClient(props: {
 
       {err && <p className="text-sm text-destructive">{err}</p>}
       <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={() => router.back()}>
+        <Button variant="outline" onClick={() => (props.onCancel ? props.onCancel() : router.back())}>
           Annuler
         </Button>
         <Button onClick={submit} disabled={pending || lines.length === 0 || !partyId}>

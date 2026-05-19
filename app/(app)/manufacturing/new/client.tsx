@@ -17,7 +17,7 @@ type Prod = {
   boms: { id: string; version: string; isActive: boolean }[];
 };
 
-export default function NewOfClient({ products }: { products: Prod[] }) {
+export default function NewOfClient({ products, onCancel }: { products: Prod[]; onCancel?: () => void }) {
   const router = useRouter();
   const [productId, setProductId] = useState(products[0].id);
   const product = products.find((p) => p.id === productId)!;
@@ -107,7 +107,7 @@ export default function NewOfClient({ products }: { products: Prod[] }) {
         </div>
         {err && <p className="text-sm text-destructive">{err}</p>}
         <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={() => router.back()}>
+          <Button variant="outline" onClick={() => (onCancel ? onCancel() : router.back())}>
             Annuler
           </Button>
           <Button onClick={submit} disabled={pending}>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requirePermission } from "@/lib/auth/session";
 import { prisma } from "@/lib/db";
+import { CreateManufacturingOrderDialog } from "./create-dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,8 @@ export const dynamic = "force-dynamic";
 
 export default async function ManufacturingPage() {
   await requirePermission("of.read");
-  const ofs = await prisma.manufacturingOrder.findMany({
+  const [ofs, products] = await Promise.all([
+    prisma.manufacturingOrder.findMany({
     orderBy: { createdAt: "desc" },
     include: {
       product: true,
@@ -19,14 +21,28 @@ export default async function ManufacturingPage() {
       customerOrder: { include: { customer: true } },
       reservations: true,
     },
-  });
+    }),
+    prisma.product.findMany({
+      where: { deletedAt: null },
+      include: { boms: { orderBy: { createdAt: "desc" } } },
+      orderBy: { code: "asc" },
+    }),
+  ]);
+
+  const eligibleProducts = products
+    .filter((p) => p.boms.length > 0)
+    .map((p) => ({
+      id: p.id,
+      code: p.code,
+      name: p.name,
+      boms: p.boms.map((b) => ({ id: b.id, version: b.version, isActive: b.isActive })),
+    }));
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Ordres de fabrication</h1>
-        <Button asChild>
-          <Link href="/manufacturing/new">+ Nouvel OF</Link>
-        </Button>
+        <CreateManufacturingOrderDialog products={eligibleProducts} />
       </div>
       <Card>
         <CardHeader>

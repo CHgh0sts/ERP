@@ -15,7 +15,13 @@ type SupArticle = { id: string; priceHT: number; moq: number; codeArticle: strin
 type Sup = { id: string; name: string; articles: SupArticle[] };
 type Line = { articleSupplierId: string; qtyOrdered: number; unitPriceHT: number; vatRateCode: string };
 
-export default function NewOrderClient({ suppliers }: { suppliers: Sup[] }) {
+export default function NewOrderClient({
+  suppliers,
+  onCancel,
+}: {
+  suppliers: Sup[];
+  onCancel?: () => void;
+}) {
   const router = useRouter();
   const [supId, setSupId] = useState(suppliers[0]?.id ?? "");
   const [expectedAt, setExpectedAt] = useState("");
@@ -194,7 +200,7 @@ export default function NewOrderClient({ suppliers }: { suppliers: Sup[] }) {
       {err && <p className="text-sm text-destructive">{err}</p>}
 
       <div className="flex justify-end gap-2">
-        <Button variant="outline" onClick={() => router.back()}>
+        <Button variant="outline" onClick={() => (onCancel ? onCancel() : router.back())}>
           Annuler
         </Button>
         <Button onClick={submit} disabled={pending || lines.length === 0}>
