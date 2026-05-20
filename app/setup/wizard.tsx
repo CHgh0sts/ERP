@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -75,6 +75,30 @@ export default function SetupWizard() {
     admin.password === admin.password2;
   const validStep2 = company.name.trim().length >= 1 && company.fiscalYearStart && company.fiscalYearEnd;
 
+  function goToLogin() {
+    document.cookie = "app_initialized=1; path=/; max-age=31536000; samesite=lax";
+    router.replace("/login");
+    router.refresh();
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/api/setup/status", { cache: "no-store" });
+        if (!r.ok || cancelled) return;
+        const data = (await r.json()) as { initialized?: boolean };
+        if (data.initialized && !cancelled) goToLogin();
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function submit() {
     setLoading(true);
     setError(null);
@@ -91,10 +115,20 @@ export default function SetupWizard() {
     setLoading(false);
     if (!res.ok) {
       const j = await res.json().catch(() => ({}));
-      setError(j.error || "Echec de la configuration");
+      if (res.status === 409 && j.error === "already_initialized") {
+        goToLogin();
+        return;
+      }
+      const msg: Record<string, string> = {
+        already_initialized: "L'ERP est deja configure. Redirection vers la connexion...",
+        invalid_json: "Donnees invalides.",
+        invalid_input: "Verifiez les champs saisis.",
+      };
+      setError(msg[j.error as string] ?? j.error ?? "Echec de la configuration");
       return;
     }
-    router.push("/dashboard");
+    document.cookie = "app_initialized=1; path=/; max-age=31536000; samesite=lax";
+    router.replace("/dashboard");
     router.refresh();
   }
 

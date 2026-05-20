@@ -47,7 +47,9 @@ export async function POST(req: NextRequest) {
 
   const existing = await prisma.appConfig.findUnique({ where: { id: 1 } });
   if (existing?.initialized) {
-    return NextResponse.json({ error: "already_initialized" }, { status: 409 });
+    const res = NextResponse.json({ error: "already_initialized", initialized: true }, { status: 409 });
+    res.cookies.set("app_initialized", "1", { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+    return res;
   }
 
   let body: unknown;

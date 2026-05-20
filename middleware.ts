@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
+const INIT_COOKIE = "app_initialized";
+const INIT_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
 // Routes publiques (pas d'auth requise)
 const PUBLIC_PATHS = [
   "/login",
@@ -22,10 +25,41 @@ function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.includes(pathname);
 }
 
+function withInitCookie(res: NextResponse): NextResponse {
+  res.cookies.set(INIT_COOKIE, "1", { path: "/", maxAge: INIT_COOKIE_MAX_AGE, sameSite: "lax" });
+  return res;
+}
+
+function requestOrigin(req: NextRequest): string {
+  const proto = req.headers.get("x-forwarded-proto")?.split(",")[0]?.trim() ?? req.nextUrl.protocol.replace(":", "");
+  const host =
+    req.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ??
+    req.headers.get("host") ??
+    req.nextUrl.host;
+  return `${proto}://${host}`;
+}
+
+async function checkInitialized(req: NextRequest): Promise<boolean> {
+  if (req.cookies.get(INIT_COOKIE)?.value === "1") return true;
+
+  try {
+    const origin = requestOrigin(req);
+    const r = await fetch(`${origin}/api/setup/status`, {
+      cache: "no-store",
+      headers: { "x-setup-check": "1" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!r.ok) return false;
+    const data = (await r.json()) as { initialized?: boolean };
+    return !!data.initialized;
+  } catch {
+    return false;
+  }
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Requetes d'assets / API setup / API auth - laisser passer sans check d'init
   if (pathname.startsWith("/_next") || pathname.includes(".")) {
     return NextResponse.next();
   }
@@ -33,24 +67,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Verifier si l'app est initialisee via endpoint leger
-  // Pour eviter un hit API par requete on se base sur un cookie "app_initialized"
-  // pose apres setup. Si absent, on fait un fetch vers /api/setup/status.
-  const initCookie = req.cookies.get("app_initialized")?.value;
-  let initialized = initCookie === "1";
-
-  if (!initialized) {
-    try {
-      const url = new URL("/api/setup/status", req.url);
-      const r = await fetch(url.toString(), { cache: "no-store" });
-      if (r.ok) {
-        const data = (await r.json()) as { initialized: boolean };
-        initialized = !!data.initialized;
-      }
-    } catch {
-      initialized = false;
-    }
-  }
+  const initialized = await checkInitialized(req);
 
   if (!initialized) {
     if (pathname.startsWith("/setup") || pathname.startsWith("/api/setup")) {
@@ -61,24 +78,20 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // App initialisee : /setup redirige vers dashboard
+  // Deja initialise : ne plus afficher /setup
   if (pathname.startsWith("/setup")) {
     const url = req.nextUrl.clone();
-    url.pathname = "/dashboard";
-    const res = NextResponse.redirect(url);
-    res.cookies.set("app_initialized", "1", { path: "/", maxAge: 60 * 60 * 24 * 365 });
-    return res;
+    url.pathname = "/login";
+    return withInitCookie(NextResponse.redirect(url));
   }
 
-  // Memoize le flag
   const res = NextResponse.next();
-  if (!initCookie) {
-    res.cookies.set("app_initialized", "1", { path: "/", maxAge: 60 * 60 * 24 * 365 });
+  if (req.cookies.get(INIT_COOKIE)?.value !== "1") {
+    withInitCookie(res);
   }
 
   if (isPublic(pathname)) return res;
 
-  // Verifier le cookie de session
   const session = req.cookies.get("erp_session")?.value;
   if (!session) {
     if (pathname.startsWith("/api")) {
@@ -86,7 +99,7 @@ export async function middleware(req: NextRequest) {
     }
     const url = req.nextUrl.clone();
     url.pathname = "/login";
-    url.searchParams.set("next", pathname);
+    if (pathname !== "/") url.searchParams.set("next", pathname);
     return NextResponse.redirect(url);
   }
 
@@ -94,8 +107,5 @@ export async function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    // exclure statics et fichiers
-    "/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)"],
 };
