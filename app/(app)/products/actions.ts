@@ -70,7 +70,7 @@ const bomSchema = z.object({
       reference: z.string().optional().nullable(),
       notes: z.string().optional().nullable(),
     }),
-  ),
+  ).min(1, "Ajoutez au moins une ligne composant"),
 });
 
 export async function createBom(raw: z.infer<typeof bomSchema>) {
@@ -156,4 +156,13 @@ export async function deleteBom(id: string) {
   await audit({ userId: u.uid, action: "DELETE", entity: "Bom", entityId: id });
   revalidatePath(`/products/${bom.productId}`);
   return { ok: true };
+}
+
+export async function getBomFormArticles() {
+  await requirePermission("products.read");
+  return prisma.article.findMany({
+    where: { deletedAt: null },
+    select: { id: true, codeArticle: true, description: true },
+    orderBy: { codeArticle: "asc" },
+  });
 }

@@ -24,16 +24,16 @@ export function CrudModalFooter({
     <div className="flex items-center justify-between w-full">
       <div>
         {onDelete ? (
-          <Button variant="destructive" size="sm" onClick={onDelete} disabled={pending}>
+          <Button type="button" variant="destructive" size="sm" onClick={onDelete} disabled={pending}>
             <Trash2 className="h-3.5 w-3.5" /> Supprimer
           </Button>
         ) : null}
       </div>
       <div className="flex gap-2">
-        <Button variant="outline" onClick={onClose} disabled={pending}>
+        <Button type="button" variant="outline" onClick={onClose} disabled={pending}>
           Annuler
         </Button>
-        <Button onClick={onSubmit} disabled={pending}>
+        <Button type="button" onClick={onSubmit} disabled={pending}>
           {pending ? pendingLabel : submitLabel}
         </Button>
       </div>

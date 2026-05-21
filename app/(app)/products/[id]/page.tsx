@@ -32,12 +32,6 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
   });
   if (!product || product.deletedAt) notFound();
 
-  const articles = await prisma.article.findMany({
-    where: { deletedAt: null },
-    select: { id: true, codeArticle: true, description: true },
-    orderBy: { codeArticle: "asc" },
-  });
-
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -63,7 +57,7 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Nomenclatures (BOM)</CardTitle>
-          <BomClient mode="create" productId={product.id} articles={articles} />
+          <BomClient mode="create" productId={product.id} />
         </CardHeader>
         <CardContent className="space-y-3">
           {product.boms.length === 0 && (
@@ -80,7 +74,6 @@ export default async function ProductPage({ params }: { params: Promise<{ id: st
                 <BomClient
                   mode="edit"
                   productId={product.id}
-                  articles={articles}
                   bom={{
                     id: b.id,
                     version: b.version,
