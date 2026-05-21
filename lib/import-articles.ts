@@ -49,6 +49,7 @@ const VALID_TYPES = new Set([
 export type ImportReport = {
   total: number;
   created: number;
+  updated: number;
   errors: { line: number; mpn?: string; description?: string; message: string }[];
 };
 
@@ -75,9 +76,9 @@ function normType(raw: string | undefined): string {
  */
 export async function importArticleRows(
   rows: CsvRow[],
-  opts: { mapping?: Record<string, string> | null } = {},
+  opts: { mapping?: Record<string, string> | null; overwriteExisting?: boolean } = {},
 ): Promise<ImportReport> {
-  const report: ImportReport = { total: rows.length, created: 0, errors: [] };
+  const report: ImportReport = { total: rows.length, created: 0, updated: 0, errors: [] };
 
   for (let i = 0; i < rows.length; i++) {
     const rawRow = rows[i];
@@ -98,34 +99,47 @@ export async function importArticleRows(
     try {
       const code = (r.codearticle ?? "").trim() || (await nextArticleCode());
 
+      const stockAlert = Math.max(0, Math.trunc(num(r.stockalert) ?? 0));
+      const price = num(r.lastpurchaseprice);
+
+      const articleData = {
+        mpn: r.mpn?.trim() || null,
+        description,
+        componentType: normType(r.componenttype),
+        format: r.format?.trim() || null,
+        value: r.value?.trim() || null,
+        stockAlert,
+        lastPurchasePrice: price,
+        notes: r.notes?.trim() || null,
+      };
+
       const existing = await prisma.article.findFirst({
         where: { codeArticle: code },
         select: { id: true },
       });
+
       if (existing) {
-        report.errors.push({
-          line,
-          mpn: r.mpn,
-          description,
-          message: `Code article deja utilise: ${code}`,
-        });
+        if (opts.overwriteExisting) {
+          await prisma.article.update({
+            where: { id: existing.id },
+            data: { ...articleData, deletedAt: null },
+          });
+          report.updated++;
+        } else {
+          report.errors.push({
+            line,
+            mpn: r.mpn,
+            description,
+            message: `Code article deja utilise: ${code}`,
+          });
+        }
         continue;
       }
-
-      const stockAlert = Math.max(0, Math.trunc(num(r.stockalert) ?? 0));
-      const price = num(r.lastpurchaseprice);
 
       await prisma.article.create({
         data: {
           codeArticle: code,
-          mpn: r.mpn?.trim() || null,
-          description,
-          componentType: normType(r.componenttype),
-          format: r.format?.trim() || null,
-          value: r.value?.trim() || null,
-          stockAlert,
-          lastPurchasePrice: price,
-          notes: r.notes?.trim() || null,
+          ...articleData,
         },
       });
       report.created++;
@@ -145,7 +159,7 @@ export async function importArticleRows(
 export async function importArticlesFromText(
   text: string,
   type: "csv" | "json",
-  opts: { mapping?: Record<string, string> | null; delimiter?: string } = {},
+  opts: { mapping?: Record<string, string> | null; delimiter?: string; overwriteExisting?: boolean } = {},
 ): Promise<ImportReport> {
   let rows: CsvRow[];
   if (type === "csv") {
@@ -153,5 +167,5 @@ export async function importArticlesFromText(
   } else {
     rows = parseJsonArray(text);
   }
-  return importArticleRows(rows, { mapping: opts.mapping });
+  return importArticleRows(rows, { mapping: opts.mapping, overwriteExisting: opts.overwriteExisting });
 }

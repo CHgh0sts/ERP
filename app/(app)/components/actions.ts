@@ -177,6 +177,7 @@ export async function importArticlesCsv(formData: FormData) {
   const u = await requirePermission("components.import");
   const file = formData.get("file") as File | null;
   const delimiter = (formData.get("delimiter") as string | null) || undefined;
+  const overwriteExisting = formData.get("overwriteExisting") === "true" || formData.get("overwriteExisting") === "1";
   if (!file) throw new Error("Fichier manquant");
   if (file.size === 0) throw new Error("Fichier vide");
 
@@ -184,7 +185,7 @@ export async function importArticlesCsv(formData: FormData) {
   const type: "csv" | "json" = lower.endsWith(".json") ? "json" : "csv";
 
   const text = await file.text();
-  const report = await importArticlesFromText(text, type, { delimiter });
+  const report = await importArticlesFromText(text, type, { delimiter, overwriteExisting });
 
   await audit({
     userId: u.uid,
@@ -194,6 +195,8 @@ export async function importArticlesCsv(formData: FormData) {
       file: file.name,
       total: report.total,
       created: report.created,
+      updated: report.updated,
+      overwriteExisting,
       errors: report.errors.length,
     },
   });

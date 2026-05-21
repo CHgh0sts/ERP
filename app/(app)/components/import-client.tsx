@@ -10,7 +10,7 @@ import { FileUp, Upload } from "lucide-react";
 import { importArticlesCsv } from "./actions";
 
 type ReportErr = { line: number; mpn?: string; description?: string; message: string };
-type Report = { total: number; created: number; errors: ReportErr[] };
+type Report = { total: number; created: number; updated: number; errors: ReportErr[] };
 
 export default function ImportCsvClient() {
   const [open, setOpen] = useState(false);
@@ -18,6 +18,7 @@ export default function ImportCsvClient() {
   const [err, setErr] = useState<string | null>(null);
   const [report, setReport] = useState<Report | null>(null);
   const [delimiter, setDelimiter] = useState<string>(",");
+  const [overwriteExisting, setOverwriteExisting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   function reset() {
@@ -45,6 +46,7 @@ export default function ImportCsvClient() {
         const fd = new FormData();
         fd.append("file", file);
         fd.append("delimiter", delimiter);
+        if (overwriteExisting) fd.append("overwriteExisting", "true");
         const r = await importArticlesCsv(fd);
         setReport(r.report);
       } catch (e) {
@@ -110,6 +112,19 @@ export default function ImportCsvClient() {
                 </Select>
               </div>
 
+              <label className="flex items-start gap-2 text-sm cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={overwriteExisting}
+                  onChange={(e) => setOverwriteExisting(e.target.checked)}
+                />
+                <span>
+                  Ecraser les articles existants si le <b>codearticle</b> est deja utilise (met a jour description,
+                  MPN, type, etc.).
+                </span>
+              </label>
+
               <Alert variant="info" title="Colonnes reconnues">
                 <div className="text-xs leading-relaxed">
                   <p className="mb-1">
@@ -119,9 +134,10 @@ export default function ImportCsvClient() {
                     codearticle, mpn, description, componenttype, format, value, stockalert, lastpurchaseprice, notes
                   </code>
                   <p className="mt-2">
-                    Si <b>codearticle</b> est vide, un code est genere automatiquement. Les types acceptes : resistor,
-                    capacitor, inductor, ic, transistor, diode, connector, pcb, mechanical, other (ou leur equivalent
-                    francais).
+                    Si <b>codearticle</b> est vide, un code est genere automatiquement. Avec l&apos;option
+                    &quot;Ecraser&quot;, un code existant met a jour l&apos;article au lieu de produire une erreur.
+                    Les types acceptes : resistor, capacitor, inductor, ic, transistor, diode, connector, pcb,
+                    mechanical, other (ou leur equivalent francais).
                   </p>
                 </div>
               </Alert>
@@ -131,17 +147,24 @@ export default function ImportCsvClient() {
           {report && (
             <div className="space-y-3">
               <Alert
-                variant={report.errors.length === 0 ? "success" : report.created > 0 ? "warning" : "destructive"}
+                variant={
+                  report.errors.length === 0
+                    ? "success"
+                    : report.created + report.updated > 0
+                      ? "warning"
+                      : "destructive"
+                }
                 title={
                   report.errors.length === 0
                     ? "Import reussi"
-                    : report.created > 0
+                    : report.created + report.updated > 0
                       ? "Import partiel"
                       : "Aucun article importe"
                 }
               >
                 <div>
-                  <b>{report.created}</b> sur <b>{report.total}</b> article(s) importe(s).
+                  <b>{report.created}</b> cree(s), <b>{report.updated}</b> mis a jour sur <b>{report.total}</b>{" "}
+                  ligne(s).
                   {report.errors.length > 0 && (
                     <>
                       {" "}
