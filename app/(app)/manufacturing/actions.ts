@@ -9,6 +9,14 @@ import { nextOfCode, nextSimpleCode } from "@/lib/codes";
 import { audit } from "@/lib/audit";
 import type { Prisma } from "@prisma/client";
 
+const reservationLineSchema = z.object({
+  articleId: z.string(),
+  qtyNeeded: z.coerce.number().min(0.000001),
+  reference: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+  unitCostHT: z.coerce.number().optional().nullable(),
+});
+
 const createSchema = z.object({
   productId: z.string(),
   bomId: z.string(),
@@ -16,8 +24,31 @@ const createSchema = z.object({
   plannedStart: z.string().optional().nullable(),
   plannedEnd: z.string().optional().nullable(),
   customerOrderId: z.string().optional().nullable(),
+  copiedFromOfId: z.string().optional().nullable(),
   notes: z.string().optional().nullable(),
+  laborCostHT: z.coerce.number().optional().nullable(),
+  overheadCostHT: z.coerce.number().optional().nullable(),
+  lines: z.array(reservationLineSchema).optional(),
 });
+
+async function createReservations(
+  tx: Prisma.TransactionClient,
+  ofId: string,
+  lines: z.infer<typeof reservationLineSchema>[],
+) {
+  for (const line of lines) {
+    await tx.ofReservation.create({
+      data: {
+        ofId,
+        articleId: line.articleId,
+        qtyNeeded: line.qtyNeeded,
+        reference: line.reference || null,
+        notes: line.notes || null,
+        unitCostHT: line.unitCostHT ?? null,
+      },
+    });
+  }
+}
 
 export async function createManufacturingOrder(raw: z.infer<typeof createSchema>) {
   const u = await requirePermission("of.create");
@@ -39,19 +70,26 @@ export async function createManufacturingOrder(raw: z.infer<typeof createSchema>
         plannedStart: d.plannedStart ? new Date(d.plannedStart) : null,
         plannedEnd: d.plannedEnd ? new Date(d.plannedEnd) : null,
         customerOrderId: d.customerOrderId || null,
+        copiedFromOfId: d.copiedFromOfId || null,
+        laborCostHT: d.laborCostHT ?? null,
+        overheadCostHT: d.overheadCostHT ?? null,
         notes: d.notes || null,
       },
     });
 
-    for (const line of bom.lines) {
-      await tx.ofReservation.create({
-        data: {
-          ofId: created.id,
-          articleId: line.articleId,
-          qtyNeeded: line.qtyPerUnit * d.qty,
-        },
-      });
-    }
+    const lines =
+      d.lines && d.lines.length > 0
+        ? d.lines
+        : bom.lines.map((line) => ({
+            articleId: line.articleId,
+            qtyNeeded: line.qtyPerUnit * d.qty,
+            reference: line.reference,
+            notes: line.notes,
+            unitCostHT: null as number | null,
+          }));
+
+    if (lines.length === 0) throw new Error("La nomenclature ne contient aucun composant");
+    await createReservations(tx, created.id, lines);
     return created;
   });
 
@@ -317,12 +355,23 @@ export async function consumeAndFinish(raw: z.infer<typeof consumeSchema>) {
         data: { ofId: d.ofId, stockUnitId: unit.id, qty: c.qty },
       });
 
-      const res = of.reservations.find((r) => r.articleId === unit.articleId);
-      if (res) {
+      let remaining = c.qty;
+      const articleReservations = of.reservations
+        .filter((r) => r.articleId === unit.articleId)
+        .sort((a, b) => a.id.localeCompare(b.id));
+      for (const res of articleReservations) {
+        if (remaining <= 0) break;
+        const canConsume = Math.max(0, res.qtyNeeded - res.qtyConsumed);
+        if (canConsume <= 0) continue;
+        const take = Math.min(canConsume, remaining);
         await tx.ofReservation.update({
           where: { id: res.id },
-          data: { qtyConsumed: res.qtyConsumed + c.qty, qtyReserved: Math.max(0, res.qtyReserved - c.qty) },
+          data: {
+            qtyConsumed: res.qtyConsumed + take,
+            qtyReserved: Math.max(0, res.qtyReserved - take),
+          },
         });
+        remaining -= take;
       }
     }
 
@@ -403,4 +452,85 @@ export async function getManufacturingOrderFormData() {
       name: p.name,
       boms: p.boms.map((b) => ({ id: b.id, version: b.version, isActive: b.isActive })),
     }));
+}
+
+export async function copyManufacturingOrder(
+  sourceOfId: string,
+  raw: {
+    qty?: number;
+    plannedStart?: string | null;
+    plannedEnd?: string | null;
+    notes?: string | null;
+  },
+) {
+  await requirePermission("of.create");
+  const source = await prisma.manufacturingOrder.findUnique({
+    where: { id: sourceOfId },
+    include: { reservations: true },
+  });
+  if (!source) throw new Error("OF source introuvable");
+  if (source.status === "CANCELLED") throw new Error("Impossible de copier un OF annule");
+
+  const qty = raw.qty && raw.qty > 0 ? raw.qty : source.qty;
+  const ratio = qty / source.qty;
+
+  const lines = source.reservations.map((r) => ({
+    articleId: r.articleId,
+    qtyNeeded: r.qtyNeeded * ratio,
+    reference: r.reference,
+    notes: r.notes,
+    unitCostHT: r.unitCostHT,
+  }));
+
+  const noteParts = [`Copie de l'OF ${source.code}`];
+  if (raw.notes?.trim()) noteParts.push(raw.notes.trim());
+
+  return createManufacturingOrder({
+    productId: source.productId,
+    bomId: source.bomId,
+    qty,
+    plannedStart: raw.plannedStart ?? null,
+    plannedEnd: raw.plannedEnd ?? null,
+    customerOrderId: null,
+    copiedFromOfId: source.id,
+    laborCostHT: source.laborCostHT,
+    overheadCostHT: source.overheadCostHT,
+    notes: noteParts.join(" — "),
+    lines,
+  });
+}
+
+export async function saveOfReservations(
+  ofId: string,
+  lines: z.infer<typeof reservationLineSchema>[],
+  extras?: { laborCostHT?: number | null; overheadCostHT?: number | null },
+) {
+  const u = await requirePermission("of.create");
+  const parsed = z.array(reservationLineSchema).min(1).parse(lines);
+
+  await prisma.$transaction(async (tx) => {
+    const of = await tx.manufacturingOrder.findUnique({ where: { id: ofId }, include: { reservations: true } });
+    if (!of) throw new Error("OF introuvable");
+    if (of.status !== "DRAFT") throw new Error("Seuls les OF en brouillon peuvent etre modifies");
+    if (of.reservations.some((r) => r.qtyReserved > 0 || r.qtyConsumed > 0)) {
+      throw new Error("Impossible de modifier les lignes apres reservation ou consommation");
+    }
+
+    await tx.ofReservation.deleteMany({ where: { ofId } });
+    await createReservations(tx, ofId, parsed);
+
+    if (extras) {
+      await tx.manufacturingOrder.update({
+        where: { id: ofId },
+        data: {
+          laborCostHT: extras.laborCostHT ?? null,
+          overheadCostHT: extras.overheadCostHT ?? null,
+        },
+      });
+    }
+  });
+
+  await audit({ userId: u.uid, action: "UPDATE", entity: "ManufacturingOrder", entityId: ofId });
+  revalidatePath(`/manufacturing/${ofId}`);
+  return { ok: true };
 }

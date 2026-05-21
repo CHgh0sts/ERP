@@ -9,9 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { reserveOf, triggerPurchaseForShortages, startOf, consumeAndFinish, cancelOf } from "../actions";
 
 type Reservation = {
+  id: string;
   articleId: string;
   codeArticle: string;
   description: string;
+  reference: string | null;
   qtyNeeded: number;
   qtyReserved: number;
   qtyConsumed: number;
@@ -156,7 +158,8 @@ export default function OfClient(props: {
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="py-1">Article</th>
+                <th className="py-1">Ref</th>
+                <th>Article</th>
                 <th>Description</th>
                 <th>Besoin</th>
                 <th>Reserve</th>
@@ -170,7 +173,8 @@ export default function OfClient(props: {
                 const missing = Math.max(0, r.qtyNeeded - r.qtyReserved - r.qtyConsumed);
                 const ok = missing === 0;
                 return (
-                  <tr key={r.articleId} className="border-t">
+                  <tr key={r.id} className="border-t">
+                    <td className="py-1 font-mono text-xs">{r.reference || "—"}</td>
                     <td className="py-1 font-mono text-xs">{r.codeArticle}</td>
                     <td>{r.description}</td>
                     <td>{r.qtyNeeded}</td>
@@ -194,9 +198,10 @@ export default function OfClient(props: {
           <CardContent>
             {props.reservations.map((r) => {
               const units = unitsByArticle.get(r.articleId) ?? [];
+              const groupKey = r.id;
               if (units.length === 0)
                 return (
-                  <div key={r.articleId} className="mb-3">
+                  <div key={groupKey} className="mb-3">
                     <div className="font-medium text-sm">
                       {r.codeArticle} - {r.description}
                     </div>
@@ -204,7 +209,7 @@ export default function OfClient(props: {
                   </div>
                 );
               return (
-                <div key={r.articleId} className="mb-3">
+                <div key={groupKey} className="mb-3">
                   <div className="font-medium text-sm mb-1">
                     {r.codeArticle} - {r.description} (besoin restant : {r.qtyNeeded - r.qtyConsumed})
                   </div>

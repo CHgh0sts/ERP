@@ -6,6 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import OfClient from "./client";
+import OfCostPanel from "./cost-panel";
+import OfLinesEditor from "./lines-editor";
+import CopyOfButton from "./copy-button";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +19,10 @@ export default async function ManufacturingOrderPage({ params }: { params: Promi
     where: { id },
     include: {
       product: true,
-      bom: { include: { lines: { include: { article: true } } } },
+      bom: true,
+      copiedFromOf: { select: { id: true, code: true } },
       customerOrder: { include: { customer: true } },
-      reservations: { include: { article: true } },
+      reservations: { include: { article: true }, orderBy: { id: "asc" } },
       consumptions: { include: { stockUnit: { include: { article: true, location: true } } } },
     },
   });
@@ -33,9 +37,20 @@ export default async function ManufacturingOrderPage({ params }: { params: Promi
     orderBy: [{ articleId: "asc" }, { receivedAt: "asc" }],
   });
 
+  const canEditLines =
+    of.status === "DRAFT" && of.reservations.every((r) => r.qtyReserved === 0 && r.qtyConsumed === 0);
+
+  const lineArticles = canEditLines
+    ? await prisma.article.findMany({
+        where: { deletedAt: null },
+        select: { id: true, codeArticle: true, description: true },
+        orderBy: { codeArticle: "asc" },
+      })
+    : [];
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-start gap-4">
         <div>
           <h1 className="text-2xl font-bold">
             OF <span className="font-mono">{of.code}</span>
@@ -52,17 +67,49 @@ export default async function ManufacturingOrderPage({ params }: { params: Promi
               </>
             )}
           </p>
+          {of.copiedFromOf && (
+            <p className="text-sm mt-1">
+              Copie de{" "}
+              <Link href={`/manufacturing/${of.copiedFromOf.id}`} className="text-primary hover:underline font-mono">
+                {of.copiedFromOf.code}
+              </Link>
+            </p>
+          )}
         </div>
-        <Badge variant={of.status === "CANCELLED" ? "destructive" : "default"}>{of.status}</Badge>
+        <div className="flex items-center gap-2 shrink-0">
+          <CopyOfButton ofId={of.id} ofCode={of.code} qty={of.qty} />
+          <Badge variant={of.status === "CANCELLED" ? "destructive" : "default"}>{of.status}</Badge>
+        </div>
       </div>
+
+      <OfCostPanel ofId={of.id} />
+
+      {canEditLines && (
+        <OfLinesEditor
+          ofId={of.id}
+          articles={lineArticles}
+          laborCostHT={of.laborCostHT}
+          overheadCostHT={of.overheadCostHT}
+          lines={of.reservations.map((r) => ({
+            id: r.id,
+            articleId: r.articleId,
+            qtyNeeded: r.qtyNeeded,
+            reference: r.reference ?? "",
+            notes: r.notes ?? "",
+            unitCostHT: r.unitCostHT != null ? String(r.unitCostHT) : "",
+          }))}
+        />
+      )}
 
       <OfClient
         ofId={of.id}
         status={of.status}
         reservations={of.reservations.map((r) => ({
+          id: r.id,
           articleId: r.articleId,
           codeArticle: r.article.codeArticle,
           description: r.article.description,
+          reference: r.reference,
           qtyNeeded: r.qtyNeeded,
           qtyReserved: r.qtyReserved,
           qtyConsumed: r.qtyConsumed,

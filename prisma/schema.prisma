@@ -492,16 +492,22 @@ model ManufacturingOrder {
   startedAt       DateTime?
   completedAt     DateTime?
   customerOrderId String?
+  copiedFromOfId  String?
+  laborCostHT     Float?
+  overheadCostHT  Float?
   notes           String?
   product         Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
   bom             Bom      @relation(fields: [bomId], references: [id], onDelete: Restrict)
   customerOrder   CustomerOrder? @relation(fields: [customerOrderId], references: [id], onDelete: SetNull)
+  copiedFromOf    ManufacturingOrder? @relation("OfCopy", fields: [copiedFromOfId], references: [id], onDelete: SetNull)
+  copies          ManufacturingOrder[] @relation("OfCopy")
   reservations    OfReservation[]
   consumptions    OfConsumption[]
   steps           OfStep[]
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  @@index([copiedFromOfId])
   @@map("manufacturing_order")
 }
 
@@ -512,10 +518,14 @@ model OfReservation {
   qtyNeeded   Float
   qtyReserved Float    @default(0)
   qtyConsumed Float    @default(0)
+  reference   String?
+  notes       String?
+  unitCostHT  Float?
   manufacturingOrder ManufacturingOrder @relation(fields: [ofId], references: [id], onDelete: Cascade)
   article     Article  @relation(fields: [articleId], references: [id], onDelete: Restrict)
 
-  @@unique([ofId, articleId])
+  @@index([ofId])
+  @@index([articleId])
   @@map("of_reservation")
 }
 
